@@ -1,8 +1,8 @@
 # Yumzi API Tracker
 
 This document tracks Yumzi-specific backend additions made on top of the
-6ammart admin/API codebase. Keep this file updated because this backend folder
-is not currently a git repository.
+6ammart admin/API codebase. Keep this file updated alongside each backend
+commit.
 
 ## Backend Root
 
@@ -94,8 +94,8 @@ curl -H 'zoneId: [6]' \
 | `lib/features/store/data/model/store_detail.dart` | Parses store bootstrap response into the existing store detail model. |
 | `lib/features/store/presentation/controller/store_detail_controller.dart` | Loads store bootstrap and indexes compact products by category locally. |
 
-## Git Recommendation
+## Git Tracking
 
-Create a separate backend Git repository or push this backend into a private
-repo. Commit the API code and docs together so backend changes can be reviewed,
+Backend changes are tracked in `https://github.com/shafiquecbl/yumzi_backend`.
+Commit the API code and docs together so backend changes can be reviewed,
 rolled back, and deployed intentionally.
