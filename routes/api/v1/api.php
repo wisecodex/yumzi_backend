@@ -340,6 +340,7 @@ Route::group(['namespace' => 'Api\V1', 'middleware'=>'localization'], function (
     Route::get('customer/order/parcel-instructions', 'OrderController@parcel_instructions');
     Route::get('most-tips', 'OrderController@most_tips');
     Route::get('stores/details/{id}', 'StoreController@get_details');
+    Route::get('stores/{store}/bootstrap', 'StoreBootstrapController@show');
 
     Route::group(['middleware'=>['module-check']], function(){
         Route::group(['prefix' => 'customer', 'middleware' => 'auth:api'], function () {
