@@ -82,6 +82,8 @@ Route::group(['namespace' => 'Api\V1', 'middleware'=>'localization'], function (
 
     // Module
     Route::get('module', 'ModuleController@index');
+    Route::get('home/bootstrap', 'HomeBootstrapController@show');
+    Route::get('modules/{module}/bootstrap', 'YumziModuleBootstrapController@show');
     Route::post('newsletter/subscribe','NewsletterController@index');
     Route::get('react-landing-page', 'ConfigController@react_landing_page')->middleware('actch:react_web');
     Route::get('flutter-landing-page', 'ConfigController@flutter_landing_page');

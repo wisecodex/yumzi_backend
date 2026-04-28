@@ -19,3 +19,6 @@ docker-local/
 .idea/
 .vscode/
 .ddev/
+composer.phar
+docs/api/
+tools/yumzi_module_bootstrap_payload_probe.mjs
