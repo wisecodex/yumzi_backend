@@ -36,6 +36,7 @@ commit.
 | File | Change |
 | --- | --- |
 | `routes/api/v1/api.php` | Added `home/bootstrap`, `modules/{module}/bootstrap`, and `stores/{store}/bootstrap` API routes. |
+| `app/Http/Controllers/Api/V1/OrderController.php` | Order list endpoints now merge compact page-level item summaries (`details_count`, `item_count`, `item_names`) from one aggregate query instead of using relation count data only. |
 | `docs/yumzi-module-bootstrap.md` | Updated module bootstrap path from `/api/v1/yumzi/modules/{module}/bootstrap` to `/api/v1/modules/{module}/bootstrap`. |
 
 ## Design Notes
@@ -51,6 +52,9 @@ commit.
 - Store bootstrap keeps full checkout/business-rule store details on the
   existing `stores/details/{id}` endpoint. It only replaces the store browsing
   screen's previous multiple-request workaround.
+- Order list rows should stay compact. Do not call order details per row and
+  do not return full `details` arrays for the list screen. Use the aggregate
+  summary fields for list labels and keep full detail rows for order details.
 - Local image fallback currently points missing local files to
   `https://admin.sdrd.store/storage/app/public/...` for testing with the SDRD
   dataset.
@@ -64,6 +68,7 @@ php -l app/Services/YumziModuleBootstrapService.php
 php -l app/Http/Controllers/Api/V1/YumziModuleBootstrapController.php
 php -l app/Services/StoreBootstrapService.php
 php -l app/Http/Controllers/Api/V1/StoreBootstrapController.php
+php -l app/Http/Controllers/Api/V1/OrderController.php
 php -l routes/api/v1/api.php
 
 curl -H 'zoneId: [6]' \

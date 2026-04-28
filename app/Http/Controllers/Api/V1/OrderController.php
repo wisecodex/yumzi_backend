@@ -91,14 +91,19 @@ class OrderController extends Controller
         }
         $user_id = $request->user ? $request->user->id : $request['guest_id'];
 
-        $paginator = Order::with(['store', 'delivery_man.rating', 'parcel_category', 'refund:order_id,admin_note,customer_note'])->withCount('details')->where(['user_id' => $user_id])
+        $paginator = Order::with(['store', 'delivery_man.rating', 'parcel_category', 'refund:order_id,admin_note,customer_note'])->where(['user_id' => $user_id])
         ->whereIn('order_status', ['delivered', 'canceled', 'refund_requested', 'refund_request_canceled', 'refunded', 'failed','returned'])
             ->when(isset($request->user), function ($query) {
                 $query->where('is_guest', 0);
             })
 
             ->Notpos()->latest()->paginate($request['limit'], ['*'], 'page', $request['offset']);
-        $orders = array_map(function ($data) {
+        $item_summaries = $this->get_order_item_summaries(collect($paginator->items())->pluck('id')->all());
+        $orders = array_map(function ($data) use ($item_summaries) {
+            $item_summary = $item_summaries->get($data['id']);
+            $data['details_count'] = (int)($item_summary?->details_count ?? 0);
+            $data['item_count'] = (int)($item_summary?->item_count ?? 0);
+            $data['item_names'] = $item_summary?->item_names ?? '';
             $data['delivery_address'] = $data['delivery_address'] ? json_decode($data['delivery_address']) : $data['delivery_address'];
             $data['store'] = $data['store'] ? Helpers::store_data_formatting($data['store']) : $data['store'];
             $data['delivery_man'] = $data['delivery_man'] ? Helpers::deliverymen_data_formatting([$data['delivery_man']]) : $data['delivery_man'];
@@ -132,11 +137,15 @@ class OrderController extends Controller
             ->when(isset($request->user), function ($query) {
                 $query->where('is_guest', 0);
             })
-            ->withCount('details')
             ->where(['user_id' => $user_id])->whereNotIn('order_status', ['delivered', 'canceled', 'refund_requested', 'refund_request_canceled', 'refunded', 'failed','returned'])
             ->Notpos()->latest()->paginate($request['limit'], ['*'], 'page', $request['offset']);
 
-        $orders = array_map(function ($data) {
+        $item_summaries = $this->get_order_item_summaries(collect($paginator->items())->pluck('id')->all());
+        $orders = array_map(function ($data) use ($item_summaries) {
+            $item_summary = $item_summaries->get($data['id']);
+            $data['details_count'] = (int)($item_summary?->details_count ?? 0);
+            $data['item_count'] = (int)($item_summary?->item_count ?? 0);
+            $data['item_names'] = $item_summary?->item_names ?? '';
             $data['delivery_address'] = $data['delivery_address'] ? json_decode($data['delivery_address']) : $data['delivery_address'];
             $data['store'] = $data['store'] ? Helpers::store_data_formatting($data['store']) : $data['store'];
             $data['delivery_man'] = $data['delivery_man'] ? Helpers::deliverymen_data_formatting([$data['delivery_man']]) : $data['delivery_man'];
@@ -149,6 +158,24 @@ class OrderController extends Controller
             'orders' => $orders
         ];
         return response()->json($data, 200);
+    }
+
+    private function get_order_item_summaries(array $order_ids)
+    {
+        $order_ids = array_values(array_filter($order_ids));
+        if (empty($order_ids)) {
+            return collect();
+        }
+
+        return DB::table('order_details')
+            ->select('order_id')
+            ->selectRaw('COUNT(*) as details_count')
+            ->selectRaw('COALESCE(SUM(quantity), 0) as item_count')
+            ->selectRaw("GROUP_CONCAT(CASE WHEN JSON_VALID(item_details) THEN JSON_UNQUOTE(JSON_EXTRACT(item_details, '$.name')) ELSE NULL END ORDER BY id SEPARATOR ', ') as item_names")
+            ->whereIn('order_id', $order_ids)
+            ->groupBy('order_id')
+            ->get()
+            ->keyBy('order_id');
     }
 
     public function get_order_details(Request $request)
