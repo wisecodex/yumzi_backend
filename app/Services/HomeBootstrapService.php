@@ -231,31 +231,53 @@ class HomeBootstrapService
 
     private function attachStoreSupportData(array $stores, array $storeIds): array
     {
-        $itemDiscountStoreIds = $this->itemDiscountStoreIds($storeIds);
+        $itemDiscountSummaries = $this->itemDiscountSummaries($storeIds);
 
-        return array_map(function (array $store) use ($itemDiscountStoreIds): array {
+        return array_map(function (array $store) use ($itemDiscountSummaries): array {
             $storeId = $store['id'];
-            $store['has_discount'] = $store['discount'] !== null || in_array($storeId, $itemDiscountStoreIds, true);
+            $itemDiscountSummary = $itemDiscountSummaries[$storeId] ?? null;
+
+            if ($store['discount'] === null && $itemDiscountSummary) {
+                $store['discount_label'] = $itemDiscountSummary['discount_label'];
+            }
+
+            $store['has_discount'] = $store['discount'] !== null || $itemDiscountSummary !== null;
 
             return $store;
         }, $stores);
     }
 
-    private function itemDiscountStoreIds(array $storeIds): array
+    private function itemDiscountSummaries(array $storeIds): array
     {
         if (empty($storeIds)) {
             return [];
         }
 
-        return DB::table('items')
+        $rows = DB::table('items')
+            ->select('store_id')
+            ->selectRaw("MAX(CASE WHEN COALESCE(NULLIF(discount_type, ''), 'percent') = 'percent' THEN discount ELSE 0 END) as max_percent_discount")
+            ->selectRaw("MAX(CASE WHEN COALESCE(NULLIF(discount_type, ''), 'percent') != 'percent' THEN discount ELSE 0 END) as max_amount_discount")
             ->whereIn('store_id', $storeIds)
             ->where('status', 1)
             ->where('is_approved', 1)
             ->where('discount', '>', 0)
-            ->distinct()
-            ->pluck('store_id')
-            ->map(fn ($storeId): int => (int) $storeId)
-            ->all();
+            ->groupBy('store_id')
+            ->get();
+
+        $summaries = [];
+
+        foreach ($rows as $row) {
+            $summary = $this->formatItemDiscountSummary([
+                'max_percent_discount' => (float) $row->max_percent_discount,
+                'max_amount_discount' => (float) $row->max_amount_discount,
+            ]);
+
+            if ($summary) {
+                $summaries[(int) $row->store_id] = $summary;
+            }
+        }
+
+        return $summaries;
     }
 
     private function storesWithRequestData(array $stores, ?float $latitude, ?float $longitude): array
@@ -422,6 +444,7 @@ class HomeBootstrapService
         return DB::table('discounts')
             ->select(['store_id', 'discount', 'discount_type', 'min_purchase', 'max_discount', 'start_date', 'end_date'])
             ->whereIn('store_id', $storeIds)
+            ->where('discount', '>', 0)
             ->whereDate('start_date', '<=', now()->toDateString())
             ->whereDate('end_date', '>=', now()->toDateString())
             ->whereTime('start_time', '<=', now()->format('H:i:s'))
@@ -549,6 +572,35 @@ class HomeBootstrapService
         $value = rtrim(rtrim(number_format((float) $discount->discount, 2, '.', ''), '0'), '.');
 
         return $discount->discount_type === 'percent' ? "{$value}% off" : "{$value} off";
+    }
+
+    private function formatItemDiscountSummary(array $summary): ?array
+    {
+        $maxPercentDiscount = (float) ($summary['max_percent_discount'] ?? 0);
+        $maxAmountDiscount = (float) ($summary['max_amount_discount'] ?? 0);
+
+        if ($maxPercentDiscount > 0) {
+            return [
+                'discount' => $maxPercentDiscount,
+                'discount_type' => 'percent',
+                'discount_label' => 'Up to ' . $this->discountValue($maxPercentDiscount) . '% off',
+            ];
+        }
+
+        if ($maxAmountDiscount > 0) {
+            return [
+                'discount' => $maxAmountDiscount,
+                'discount_type' => 'amount',
+                'discount_label' => 'Up to ' . $this->discountValue($maxAmountDiscount) . ' off',
+            ];
+        }
+
+        return null;
+    }
+
+    private function discountValue(float $discount): string
+    {
+        return rtrim(rtrim(number_format($discount, 2, '.', ''), '0'), '.');
     }
 
     private function minDeliveryMinutes(?string $deliveryTime): int

@@ -22,3 +22,6 @@ The endpoint returns one compact payload for the Yumzi home tab:
 
 The response intentionally avoids full store/item payloads. Store detail and
 item detail screens should continue to call their detail endpoints after a tap.
+Store offer badges use compact fields only: `has_discount` and `discount_label`.
+For item-wise discounts, `discount_label` is derived from one grouped summary
+query by `store_id` instead of loading item rows per store.

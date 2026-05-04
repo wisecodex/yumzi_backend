@@ -37,6 +37,9 @@ commit.
 | --- | --- |
 | `routes/api/v1/api.php` | Added `home/bootstrap`, `modules/{module}/bootstrap`, and `stores/{store}/bootstrap` API routes. |
 | `app/Http/Controllers/Api/V1/OrderController.php` | Order list endpoints now merge compact page-level item summaries (`details_count`, `item_count`, `item_names`) from one aggregate query instead of using relation count data only. |
+| `app/Services/HomeBootstrapService.php` | Recommended-store offer labels now merge compact item-discount summaries from one grouped query instead of only returning generic item-discount booleans. |
+| `app/Services/YumziModuleBootstrapService.php` | Module store offer labels now reuse the existing compact item scan to derive item-wise `discount_label` values without per-store queries. |
+| `app/Services/StoreBootstrapService.php` | Store detail offer labels now derive item-wise badges from the already-loaded compact item list and avoid the previous extra item-existence query. |
 | `docs/yumzi-module-bootstrap.md` | Updated module bootstrap path from `/api/v1/yumzi/modules/{module}/bootstrap` to `/api/v1/modules/{module}/bootstrap`. |
 
 ## Design Notes
@@ -55,6 +58,9 @@ commit.
 - Order list rows should stay compact. Do not call order details per row and
   do not return full `details` arrays for the list screen. Use the aggregate
   summary fields for list labels and keep full detail rows for order details.
+- Store offer badges follow the same performance rule: do not load full items
+  or run per-store item checks for listing labels. Merge keyed compact summaries
+  into store rows and keep full price rules on detail/checkout paths.
 - Local image fallback currently points missing local files to
   `https://admin.sdrd.store/storage/app/public/...` for testing with the SDRD
   dataset.

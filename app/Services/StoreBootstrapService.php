@@ -52,15 +52,17 @@ class StoreBootstrapService
     {
         $storeId = (int) $store->id;
         $moduleId = (int) $store->module_id;
-        $items = $this->items($storeId, $moduleId, $store);
+        $storeDiscount = $this->storeDiscounts([$storeId])[$storeId] ?? null;
+        $items = $this->items($storeId, $moduleId, $storeDiscount);
         $categoryIds = $this->storeCategoryIds($items);
         $categories = $this->categories($categoryIds);
         $recommendedItemIds = array_values(array_map(
             'intval',
             array_column(array_filter($items, fn (array $item): bool => (int) ($item['recommended'] ?? 0) === 1), 'id')
         ));
+        $itemDiscountSummary = $storeDiscount ? null : $this->itemDiscountSummaryFromItems($items);
 
-        $formattedStore = $this->formatStore($store, $categoryIds, $categories, count($items));
+        $formattedStore = $this->formatStore($store, $categoryIds, $categories, count($items), $storeDiscount, $itemDiscountSummary);
 
         return [
             'store' => $formattedStore,
@@ -142,15 +144,20 @@ class StoreBootstrapService
             ->first();
     }
 
-    private function formatStore(object $store, array $categoryIds, array $categories, int $itemCount): array
+    private function formatStore(
+        object $store,
+        array $categoryIds,
+        array $categories,
+        int $itemCount,
+        ?object $discount,
+        ?array $itemDiscountSummary
+    ): array
     {
         $storeId = (int) $store->id;
         $nameTranslations = $this->translations(Store::class, [$storeId], ['name']);
         $storage = $this->storage(Store::class, [$storeId], ['logo', 'cover_photo']);
         $schedules = $this->storeSchedules([$storeId]);
-        $discounts = $this->storeDiscounts([$storeId]);
         $rating = $this->rating($store->rating);
-        $discount = $discounts[$storeId] ?? null;
 
         return [
             'id' => $storeId,
@@ -169,8 +176,8 @@ class StoreBootstrapService
             'min_delivery_time' => $this->minDeliveryMinutes($store->delivery_time),
             'free_delivery' => (bool) $store->free_delivery,
             'discount' => $this->formatDiscount($discount),
-            'discount_label' => $this->discountLabel($discount),
-            'has_discount' => $discount !== null || $this->itemsHaveDiscount((int) $store->id, (int) $store->module_id),
+            'discount_label' => $this->discountLabel($discount) ?? ($itemDiscountSummary['discount_label'] ?? null),
+            'has_discount' => $discount !== null || $itemDiscountSummary !== null,
             'active' => (bool) $store->active,
             'featured' => (int) $store->featured,
             'total_order' => max((int) $store->total_order, (int) $store->order_count),
@@ -206,7 +213,7 @@ class StoreBootstrapService
         return $store;
     }
 
-    private function items(int $storeId, int $moduleId, object $store): array
+    private function items(int $storeId, int $moduleId, ?object $storeDiscount): array
     {
         $items = DB::table('items')
             ->select([
@@ -238,7 +245,6 @@ class StoreBootstrapService
         $itemIds = $items->pluck('id')->map(fn ($id): int => (int) $id)->all();
         $translations = $this->translations(Item::class, $itemIds, ['name', 'description']);
         $storage = $this->storage(Item::class, $itemIds, ['image']);
-        $storeDiscount = $this->storeDiscounts([(int) $store->id])[(int) $store->id] ?? null;
         $categoryNames = $this->categoryNamesForItems($items);
 
         return $items->map(function (object $item) use ($translations, $storage, $storeDiscount, $categoryNames): array {
@@ -433,17 +439,6 @@ class StoreBootstrapService
         return is_array($decoded) ? $decoded : [];
     }
 
-    private function itemsHaveDiscount(int $storeId, int $moduleId): bool
-    {
-        return DB::table('items')
-            ->where('store_id', $storeId)
-            ->where('module_id', $moduleId)
-            ->where('status', 1)
-            ->where('is_approved', 1)
-            ->where('discount', '>', 0)
-            ->exists();
-    }
-
     private function storeSchedules(array $storeIds): array
     {
         if (empty($storeIds)) {
@@ -475,6 +470,7 @@ class StoreBootstrapService
         return DB::table('discounts')
             ->select(['store_id', 'discount', 'discount_type', 'min_purchase', 'max_discount', 'start_date', 'end_date'])
             ->whereIn('store_id', $storeIds)
+            ->where('discount', '>', 0)
             ->whereDate('start_date', '<=', now()->toDateString())
             ->whereDate('end_date', '>=', now()->toDateString())
             ->whereTime('start_time', '<=', now()->format('H:i:s'))
@@ -588,6 +584,60 @@ class StoreBootstrapService
         $value = rtrim(rtrim(number_format((float) $discount->discount, 2, '.', ''), '0'), '.');
 
         return $discount->discount_type === 'percent' ? "{$value}% off" : "{$value} off";
+    }
+
+    private function itemDiscountSummaryFromItems(array $items): ?array
+    {
+        $summary = [
+            'max_percent_discount' => 0,
+            'max_amount_discount' => 0,
+        ];
+
+        foreach ($items as $item) {
+            $discount = (float) ($item['discount'] ?? 0);
+            if ($discount <= 0) {
+                continue;
+            }
+
+            if (($item['discount_type'] ?? 'percent') === 'percent') {
+                $summary['max_percent_discount'] = max($summary['max_percent_discount'], $discount);
+
+                continue;
+            }
+
+            $summary['max_amount_discount'] = max($summary['max_amount_discount'], $discount);
+        }
+
+        return $this->formatItemDiscountSummary($summary);
+    }
+
+    private function formatItemDiscountSummary(array $summary): ?array
+    {
+        $maxPercentDiscount = (float) ($summary['max_percent_discount'] ?? 0);
+        $maxAmountDiscount = (float) ($summary['max_amount_discount'] ?? 0);
+
+        if ($maxPercentDiscount > 0) {
+            return [
+                'discount' => $maxPercentDiscount,
+                'discount_type' => 'percent',
+                'discount_label' => 'Up to ' . $this->discountValue($maxPercentDiscount) . '% off',
+            ];
+        }
+
+        if ($maxAmountDiscount > 0) {
+            return [
+                'discount' => $maxAmountDiscount,
+                'discount_type' => 'amount',
+                'discount_label' => 'Up to ' . $this->discountValue($maxAmountDiscount) . ' off',
+            ];
+        }
+
+        return null;
+    }
+
+    private function discountValue(float $discount): string
+    {
+        return rtrim(rtrim(number_format($discount, 2, '.', ''), '0'), '.');
     }
 
     private function minDeliveryMinutes(?string $deliveryTime): int

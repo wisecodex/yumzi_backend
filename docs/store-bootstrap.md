@@ -63,6 +63,10 @@ the full item by id after the user taps a row.
 `category_ids` keeps the existing 6ammart object shape so Yumzi's
 `ProductModel.parentCategoryIds` getter continues to work.
 
+Store offer badges are derived from the loaded compact item list when no
+store-wide discount exists. This keeps `has_discount` and `discount_label`
+accurate without running a second per-store item existence query.
+
 ## Caching
 
 The base payload is cached for 60 seconds by store id and locale. Distance,

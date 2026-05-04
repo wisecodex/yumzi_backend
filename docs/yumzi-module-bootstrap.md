@@ -28,6 +28,9 @@ The endpoint returns one compact payload for a module landing screen:
 - This endpoint intentionally does not call `Helpers::store_data_formatting()`.
   That helper is useful for legacy full store responses, but it loads extra data
   and performs per-store item min/max queries that the module listing does not need.
+- Store offer badges stay compact. Store-wide discounts fill `discount` and
+  `discount_label`; item-wise discounts fill `discount_label` from the same
+  item scan already used for category support, without per-store item queries.
 - Store schedules are included so the app can recalculate open/closed state during
   long sessions without refetching the module bootstrap.
 - Banners use normalized actions instead of embedding full store/item payloads:

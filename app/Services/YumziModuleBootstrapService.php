@@ -189,13 +189,20 @@ class YumziModuleBootstrapService
     private function attachStoreSupportData(array $stores, array $itemData): array
     {
         $categoryIdsByStore = $itemData['category_ids_by_store'];
-        $itemDiscountStoreIds = $itemData['item_discount_store_ids'];
+        $itemDiscountSummaries = $itemData['item_discount_summaries'];
 
-        return array_map(function (array $store) use ($categoryIdsByStore, $itemDiscountStoreIds): array {
+        return array_map(function (array $store) use ($categoryIdsByStore, $itemDiscountSummaries): array {
             $storeId = $store['id'];
+            $itemDiscountSummary = $itemDiscountSummaries[$storeId] ?? null;
+
             $store['category_ids'] = $categoryIdsByStore[$storeId] ?? [];
             $store['cuisine_ids'] = [];
-            $store['has_discount'] = $store['discount'] !== null || in_array($storeId, $itemDiscountStoreIds, true);
+
+            if ($store['discount'] === null && $itemDiscountSummary) {
+                $store['discount_label'] = $itemDiscountSummary['discount_label'];
+            }
+
+            $store['has_discount'] = $store['discount'] !== null || $itemDiscountSummary !== null;
             $store['is_new'] = $this->isNewStore($store['created_at']);
 
             unset($store['created_at'], $store['logo']);
@@ -297,12 +304,12 @@ class YumziModuleBootstrapService
             return [
                 'category_ids_by_store' => [],
                 'category_store_counts' => [],
-                'item_discount_store_ids' => [],
+                'item_discount_summaries' => [],
             ];
         }
 
         $items = DB::table('items')
-            ->select(['store_id', 'category_id', 'category_ids', 'discount'])
+            ->select(['store_id', 'category_id', 'category_ids', 'discount', 'discount_type'])
             ->whereIn('store_id', $storeIds)
             ->where('module_id', $moduleId)
             ->where('status', 1)
@@ -311,7 +318,7 @@ class YumziModuleBootstrapService
 
         $categoryIdsByStore = [];
         $categoryStoreIds = [];
-        $itemDiscountStoreIds = [];
+        $itemDiscountsByStore = [];
 
         foreach ($items as $item) {
             $storeId = (int) $item->store_id;
@@ -324,14 +331,14 @@ class YumziModuleBootstrapService
             }
 
             if ((float) $item->discount > 0) {
-                $itemDiscountStoreIds[$storeId] = true;
+                $this->captureItemDiscount($itemDiscountsByStore, $storeId, (float) $item->discount, $item->discount_type ?: 'percent');
             }
         }
 
         return [
             'category_ids_by_store' => $categoryIdsByStore,
             'category_store_counts' => array_map('count', $categoryStoreIds),
-            'item_discount_store_ids' => array_map('intval', array_keys($itemDiscountStoreIds)),
+            'item_discount_summaries' => $this->formatItemDiscountSummaries($itemDiscountsByStore),
         ];
     }
 
@@ -366,6 +373,7 @@ class YumziModuleBootstrapService
         return DB::table('discounts')
             ->select(['store_id', 'discount', 'discount_type', 'min_purchase', 'max_discount', 'start_date', 'end_date'])
             ->whereIn('store_id', $storeIds)
+            ->where('discount', '>', 0)
             ->whereDate('start_date', '<=', now()->toDateString())
             ->whereDate('end_date', '>=', now()->toDateString())
             ->whereTime('start_time', '<=', now()->format('H:i:s'))
@@ -701,6 +709,66 @@ class YumziModuleBootstrapService
         $value = rtrim(rtrim(number_format((float) $discount->discount, 2, '.', ''), '0'), '.');
 
         return $discount->discount_type === 'percent' ? "{$value}% off" : "{$value} off";
+    }
+
+    private function captureItemDiscount(array &$summaries, int $storeId, float $discount, string $discountType): void
+    {
+        $summaries[$storeId] ??= [
+            'max_percent_discount' => 0,
+            'max_amount_discount' => 0,
+        ];
+
+        if ($discountType === 'percent') {
+            $summaries[$storeId]['max_percent_discount'] = max($summaries[$storeId]['max_percent_discount'], $discount);
+
+            return;
+        }
+
+        $summaries[$storeId]['max_amount_discount'] = max($summaries[$storeId]['max_amount_discount'], $discount);
+    }
+
+    private function formatItemDiscountSummaries(array $summaries): array
+    {
+        $formatted = [];
+
+        foreach ($summaries as $storeId => $summary) {
+            $itemDiscountSummary = $this->formatItemDiscountSummary($summary);
+
+            if ($itemDiscountSummary) {
+                $formatted[(int) $storeId] = $itemDiscountSummary;
+            }
+        }
+
+        return $formatted;
+    }
+
+    private function formatItemDiscountSummary(array $summary): ?array
+    {
+        $maxPercentDiscount = (float) ($summary['max_percent_discount'] ?? 0);
+        $maxAmountDiscount = (float) ($summary['max_amount_discount'] ?? 0);
+
+        if ($maxPercentDiscount > 0) {
+            return [
+                'discount' => $maxPercentDiscount,
+                'discount_type' => 'percent',
+                'discount_label' => 'Up to ' . $this->discountValue($maxPercentDiscount) . '% off',
+            ];
+        }
+
+        if ($maxAmountDiscount > 0) {
+            return [
+                'discount' => $maxAmountDiscount,
+                'discount_type' => 'amount',
+                'discount_label' => 'Up to ' . $this->discountValue($maxAmountDiscount) . ' off',
+            ];
+        }
+
+        return null;
+    }
+
+    private function discountValue(float $discount): string
+    {
+        return rtrim(rtrim(number_format($discount, 2, '.', ''), '0'), '.');
     }
 
     private function minDeliveryMinutes(?string $deliveryTime): int

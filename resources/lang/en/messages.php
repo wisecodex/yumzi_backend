@@ -9756,4 +9756,5 @@ Smartly or Earn. ',
   'Invalid_return_otp' => 'Invalid return otp',
   'Allowing the option that deliverymen will get points when they complete the order delivery successfully.' => 'Allowing the option that deliverymen will get points when they complete the order delivery successfully.',
   'Loyalty Point Setup' => 'Loyalty Point Setup',
+  'longitude-latitude_required' => 'Longitude-latitude required',
 );
