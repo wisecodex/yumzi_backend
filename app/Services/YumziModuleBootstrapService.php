@@ -202,7 +202,7 @@ class YumziModuleBootstrapService
                 $store['discount_label'] = $itemDiscountSummary['discount_label'];
             }
 
-            $store['has_discount'] = $store['discount'] !== null || $itemDiscountSummary !== null;
+            $store['has_discount'] = ! empty($store['discount_label']);
             $store['is_new'] = $this->isNewStore($store['created_at']);
 
             unset($store['created_at'], $store['logo']);

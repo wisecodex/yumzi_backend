@@ -58,6 +58,7 @@ the full item by id after the user taps a row.
 | `price`, `discount`, `discount_type` | Product row price/discount display |
 | `avg_rating`, `rating_count` | Existing product model rating getters |
 | `stock` | Existing product model stock getter |
+| `availability` | Compact availability object: `available_now` + display `label` |
 | `category_id`, `category_ids` | Local category indexing |
 
 `category_ids` keeps the existing 6ammart object shape so Yumzi's
@@ -66,6 +67,16 @@ the full item by id after the user taps a row.
 Store offer badges are derived from the loaded compact item list when no
 store-wide discount exists. This keeps `has_discount` and `discount_label`
 accurate without running a second per-store item existence query.
+
+Product availability stays compact on this endpoint. Instead of returning the
+full item availability window fields, each compact item has:
+
+```json
+"availability": {
+  "available_now": false,
+  "label": "10:00"
+}
+```
 
 ## Caching
 

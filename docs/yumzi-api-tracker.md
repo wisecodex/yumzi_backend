@@ -40,7 +40,9 @@ commit.
 | `app/Services/HomeBootstrapService.php` | Recommended-store offer labels now merge compact item-discount summaries from one grouped query instead of only returning generic item-discount booleans. |
 | `app/Services/YumziModuleBootstrapService.php` | Module store offer labels now reuse the existing compact item scan to derive item-wise `discount_label` values without per-store queries. |
 | `app/Services/StoreBootstrapService.php` | Store detail offer labels now derive item-wise badges from the already-loaded compact item list and avoid the previous extra item-existence query. |
+| `app/Services/StoreBootstrapService.php` | Compact item rows now include one `availability` object instead of exposing multiple availability-window fields. |
 | `docs/yumzi-module-bootstrap.md` | Updated module bootstrap path from `/api/v1/yumzi/modules/{module}/bootstrap` to `/api/v1/modules/{module}/bootstrap`. |
+| `docs/store-bootstrap.md` | Documented the compact item `availability` field. |
 
 ## Design Notes
 

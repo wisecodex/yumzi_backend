@@ -73,7 +73,7 @@ class StoreBootstrapService
                 'total_items' => count($items),
                 'recommended_count' => count($recommendedItemIds),
                 'cache_ttl_seconds' => self::CACHE_TTL_SECONDS,
-                'payload_version' => 1,
+                'payload_version' => 2,
             ],
         ];
     }
@@ -158,6 +158,7 @@ class StoreBootstrapService
         $storage = $this->storage(Store::class, [$storeId], ['logo', 'cover_photo']);
         $schedules = $this->storeSchedules([$storeId]);
         $rating = $this->rating($store->rating);
+        $discountLabel = $this->discountLabel($discount) ?? ($itemDiscountSummary['discount_label'] ?? null);
 
         return [
             'id' => $storeId,
@@ -176,8 +177,8 @@ class StoreBootstrapService
             'min_delivery_time' => $this->minDeliveryMinutes($store->delivery_time),
             'free_delivery' => (bool) $store->free_delivery,
             'discount' => $this->formatDiscount($discount),
-            'discount_label' => $this->discountLabel($discount) ?? ($itemDiscountSummary['discount_label'] ?? null),
-            'has_discount' => $discount !== null || $itemDiscountSummary !== null,
+            'discount_label' => $discountLabel,
+            'has_discount' => ! empty($discountLabel),
             'active' => (bool) $store->active,
             'featured' => (int) $store->featured,
             'total_order' => max((int) $store->total_order, (int) $store->order_count),
@@ -230,6 +231,8 @@ class StoreBootstrapService
                 'avg_rating',
                 'rating_count',
                 'stock',
+                'available_time_starts',
+                'available_time_ends',
                 'category_id',
                 'category_ids',
                 'recommended',
@@ -265,6 +268,7 @@ class StoreBootstrapService
                 'avg_rating' => (float) ($item->avg_rating ?? 0),
                 'rating_count' => (int) ($item->rating_count ?? 0),
                 'stock' => (int) ($item->stock ?? 0),
+                'availability' => $this->availability($item->available_time_starts, $item->available_time_ends),
                 'category_id' => (int) $item->category_id,
                 'category_ids' => $this->categoryIdsWithNames($item->category_ids, (int) $item->category_id, $categoryNames),
                 'recommended' => (int) $item->recommended,
@@ -294,6 +298,32 @@ class StoreBootstrapService
             'discount' => $productDiscount,
             'discount_type' => $productType,
         ];
+    }
+
+    private function availability(?string $startsAt, ?string $endsAt): array
+    {
+        $start = $this->timeString($startsAt);
+        $end = $this->timeString($endsAt);
+
+        return [
+            'available_now' => $this->isTimeAvailableNow($start, $end),
+            'label' => substr($start, 0, 5),
+        ];
+    }
+
+    private function isTimeAvailableNow(string $start, string $end): bool
+    {
+        if ($start === $end) {
+            return true;
+        }
+
+        $now = now()->format('H:i:s');
+
+        if ($start < $end) {
+            return $now >= $start && $now <= $end;
+        }
+
+        return $now >= $start || $now <= $end;
     }
 
     private function stripInternalItemFields(array $items): array
@@ -763,7 +793,7 @@ class StoreBootstrapService
 
     private function cacheKey(int $storeId): string
     {
-        return 'store_bootstrap_v1_' . md5($storeId . '|' . app()->getLocale());
+        return 'store_bootstrap_v2_' . md5($storeId . '|' . app()->getLocale());
     }
 
     private function error(string $code, string $message): array

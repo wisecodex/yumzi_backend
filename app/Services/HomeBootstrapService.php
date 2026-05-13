@@ -241,7 +241,7 @@ class HomeBootstrapService
                 $store['discount_label'] = $itemDiscountSummary['discount_label'];
             }
 
-            $store['has_discount'] = $store['discount'] !== null || $itemDiscountSummary !== null;
+            $store['has_discount'] = ! empty($store['discount_label']);
 
             return $store;
         }, $stores);
