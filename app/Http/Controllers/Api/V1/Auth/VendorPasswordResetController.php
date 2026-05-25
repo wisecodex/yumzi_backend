@@ -30,8 +30,7 @@ class VendorPasswordResetController extends Controller
 
         if (isset($vendor)) {
             $token = rand(1000,9999);
-            DB::table('password_resets')->updateOrInsert([
-                'email' => $vendor['email'],
+            DB::table('password_resets')->updateOrInsert(['email' => $vendor['email']], [
                 'token' => $token,
                 'created_at' => now(),
             ]);
