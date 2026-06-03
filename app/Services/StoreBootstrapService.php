@@ -268,6 +268,12 @@ class StoreBootstrapService
                 'avg_rating' => (float) ($item->avg_rating ?? 0),
                 'rating_count' => (int) ($item->rating_count ?? 0),
                 'stock' => (int) ($item->stock ?? 0),
+                'available_time_starts' => $item->available_time_starts
+                    ? $this->timeString($item->available_time_starts)
+                    : null,
+                'available_time_ends' => $item->available_time_ends
+                    ? $this->timeString($item->available_time_ends)
+                    : null,
                 'availability' => $this->availability($item->available_time_starts, $item->available_time_ends),
                 'category_id' => (int) $item->category_id,
                 'category_ids' => $this->categoryIdsWithNames($item->category_ids, (int) $item->category_id, $categoryNames),
